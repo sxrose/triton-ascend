@@ -391,7 +391,6 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
                         "enable_select_analysis": enable_select_analysis,
                         "compile_on_910_95": compile_on_910_95,
                         "force_simt_template": force_simt_template,
-                        "enable_sync_block_lock": enable_sync_block_lock,
                         "enable_mask_fallback_conversion": enable_mask_fallback_conversion,
                         "optimize_dynamic_offset": optimize_dynamic_offset,
                     },
