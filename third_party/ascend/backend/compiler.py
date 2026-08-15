@@ -31,6 +31,7 @@ import subprocess
 import tempfile
 import warnings
 import time
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
