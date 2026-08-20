@@ -83,7 +83,7 @@ def _get_then_remove_rc(mod, attr_name: str) -> int:
 
     if remove_attr:
         remove_attr(mod, attr_name)
-    
+
     if not isinstance(attr_value, int):
         return -1
 
@@ -568,7 +568,7 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
         if enable_vf_fusion is not None:
             _compile_option_list += \
                 [f"--enable-vf-fusion={enable_vf_fusion}"]
-                
+
         enable_vf_operand_substitution = metadata["enable_vf_operand_substitution"]
         if enable_vf_operand_substitution:
             _compile_option_list += \
@@ -1106,6 +1106,13 @@ def ttir_to_npubin(mod, metadata, opt):
             + _compile_option_list
             + ["-o", bin_file]
         )
+
+        # TODO: scenario with debug option absent only occurs in unit tests
+        if (hasattr(opt, "debug") and opt.debug) or os.getenv("TRITON_PRINT_AUTOTUNING", None) == "1":
+            print_cmd_list = cmd_list.copy()
+            print_cmd_list[1], print_cmd_list[-1] = _get_dump_paths(metadata["hash"], src_path, bin_file)
+            print(f"[DEBUG] cmd_list: {shlex.join(print_cmd_list)}")
+
         ret = subprocess.run(cmd_list, env = env, capture_output = True, check = True)
         if not Path(bin_path).exists():
             error_msg = ret.stderr.decode('utf-8')
@@ -1116,7 +1123,7 @@ def ttir_to_npubin(mod, metadata, opt):
 
 
 def get_simt_stack_limit():
-    # simt_stack_limit resolution precedence: 
+    # simt_stack_limit resolution precedence:
     #  1.torch_npu's acl_default.json "StackSize":{"simt_stack_size":N}
     #    takes precedence and the user-specified value is ignored.
     #  2.if that config key is absent ,fail back to the kernel-time
