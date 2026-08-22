@@ -1,4 +1,4 @@
-﻿# Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+# Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import time
 import ctypes
 import functools
 import hashlib
@@ -806,7 +807,10 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
         if opt.debug or os.getenv("TRITON_PRINT_AUTOTUNING", None) == "1":
             print_cmd_list = cmd_list.copy()
             print_cmd_list[1], print_cmd_list[-1] = _get_dump_paths(metadata["hash"], ttadapter_path, bin_file)
-            print(f"[DEBUG] cmd_list: {shlex.join(print_cmd_list)}")
+            print_cmd_list = shlex.join(print_cmd_list)
+            # assumption: should be only one compile command
+            metadata["comptime"]["compile_command"] = print_cmd_list
+            print(f"[DEBUG] cmd_list: {print_cmd_list}")
 
         try:
             ret = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
@@ -1027,7 +1031,10 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
         if opt.debug or os.getenv("TRITON_PRINT_AUTOTUNING", None) == "1":
             print_cmd_list = cmd_list.copy()
             print_cmd_list[1], print_cmd_list[-1] = _get_dump_paths(metadata["hash"], ttadapter_path, bin_file)
-            print(f"[DEBUG] cmd_list: {shlex.join(print_cmd_list)}")
+            print_cmd_list = shlex.join(print_cmd_list)
+            # assumption: should be only one compile command
+            metadata["comptime"]["compile_command"] = print_cmd_list
+            print(f"[DEBUG] cmd_list: {print_cmd_list}")
 
         try:
             ret = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
@@ -1304,7 +1311,10 @@ def ttir_to_npubin(mod, metadata, opt):
         if (hasattr(opt, "debug") and opt.debug) or os.getenv("TRITON_PRINT_AUTOTUNING", None) == "1":
             print_cmd_list = cmd_list.copy()
             print_cmd_list[1], print_cmd_list[-1] = _get_dump_paths(metadata["hash"], src_path, bin_file)
-            print(f"[DEBUG] cmd_list: {shlex.join(print_cmd_list)}")
+            print_cmd_list = shlex.join(print_cmd_list)
+            # assumption: should be only one compile command
+            metadata["comptime"]["compile_command"] = print_cmd_list
+            print(f"[DEBUG] cmd_list: {print_cmd_list}")
 
         ret = subprocess.run(cmd_list, env=env, capture_output=True, check=True)
         if not Path(bin_path).exists():
@@ -1410,6 +1420,33 @@ class AscendBackend(BaseBackend):
         ascend.load_dialects(ctx)
 
     def add_stages(self, stages, options, language):
+        def _time_stage(stage, stage_name, dump_json=False):
+            if not getattr(options, "debug", False):
+                return stage
+
+            functools.wraps(stage)
+            def _wrapper(src, metadata):
+                def get_cpu_usage():
+                    load_1, _, _ = os.getloadavg()
+                    cpu_count = os.cpu_count()
+                    assert cpu_count is not None
+                    cpu_usage = (load_1 / cpu_count) * 100
+                    return cpu_usage
+
+                stage_start = time.perf_counter()
+                res = stage(src, metadata)
+                stage_end = time.perf_counter()
+                metadata["comptime"][stage_name] = {
+                    "time": stage_end - stage_start,
+                    "cpu_usage": get_cpu_usage()
+                }
+                if dump_json:
+                    dump_manager = get_dump_manager(metadata["hash"])
+                    path = Path(dump_manager.cache_dir) / "comptime.json"
+                    with path.open("w", encoding="utf-8") as f:
+                        f.write(json.dumps(metadata["comptime"]))
+
+
         if self.target.backend == "npu":
             stages["ttir"] = lambda src, metadata: make_ttir(src, metadata, options)
             if options.force_simt_only:
@@ -1429,6 +1466,7 @@ class AscendBackend(BaseBackend):
                 stages["npubin"] = (
                     lambda src, metadata: linalg_to_bin_enable_npu_compile_A2_A3(src, metadata, options))
             stages["npubin"] = _with_debug_line(stages["npubin"], options)
+            stages["npubin"] = _time_stage(stages["npubin"], "npubin", dump_json=True)
         else:
             raise NotImplementedError(f"Backend '{self.target.backend}' is not supported. "
                                       "Please ensure the target backend is set to 'npu'.")
