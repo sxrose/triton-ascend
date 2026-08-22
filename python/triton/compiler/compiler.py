@@ -6,6 +6,9 @@ from .._C.libtriton.ascend import ir as ascend_ir
 from ..backends import backends
 from ..backends.compiler import GPUTarget, AttrsDescriptor
 from .. import __version__
+from ..backends.compiler import Language
+from ..backends.compiler import BaseBackend, GPUTarget
+from .. import __version__, knobs, JITFunction
 from ..runtime.autotuner import OutOfResources
 from ..runtime.cache import get_cache_manager, get_dump_manager, get_override_manager
 from ..runtime.driver import driver
@@ -264,6 +267,14 @@ def compile(src, target=None, options=None, _env_vars=None):
         **options.__dict__,
         **env_vars,
     }
+    metadata["triton_version"] = __version__
+    if isinstance(src, ASTSource) and isinstance(src.fn, JITFunction):
+        comptime_launch_metadata = {
+            "constexpr_signature":
+                src.fn.__name__ + "(" + ", ".join([f"{src.fn.params[k[0]].name}={v}" for k, v in src.constants.items()]) + ")"
+        }
+        metadata["comptime"] = comptime_launch_metadata
+
     # run compilation pipeline  and populate metadata
     stages = dict()
     backend.add_stages(stages, options)
