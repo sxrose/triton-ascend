@@ -1255,6 +1255,7 @@ class AscendBackend(BaseBackend):
                     path = Path(dump_manager.cache_dir) / "comptime.json"
                     with path.open("w", encoding="utf-8") as f:
                         f.write(json.dumps(metadata["comptime"]))
+            return _wrapper
 
 
         if self.target.backend == "npu":
