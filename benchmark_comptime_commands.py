@@ -11,7 +11,7 @@ from typing import Any
 
 
 def remove_outliers(samples: list[float]) -> list[float]:
-    """Discard timings whose MAD-based modified Z-score exceeds 1.5."""
+    """Discard timings whose MAD-based modified Z-score exceeds 3.5."""
     median = statistics.median(samples)
     deviations = [abs(sample - median) for sample in samples]
     median_absolute_deviation = statistics.median(deviations)
@@ -20,7 +20,7 @@ def remove_outliers(samples: list[float]) -> list[float]:
 
     return [
         sample for sample in samples
-        if 0.6745 * abs(sample - median) / median_absolute_deviation <= 1.5
+        if 0.6745 * abs(sample - median) / median_absolute_deviation <= 3.5
     ]
 
 
