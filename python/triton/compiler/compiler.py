@@ -6,9 +6,8 @@ from .._C.libtriton.ascend import ir as ascend_ir
 from ..backends import backends
 from ..backends.compiler import GPUTarget, AttrsDescriptor
 from .. import __version__
-from ..backends.compiler import Language
 from ..backends.compiler import BaseBackend, GPUTarget
-from .. import __version__, knobs, JITFunction
+from .. import __version__, JITFunction
 from ..runtime.autotuner import OutOfResources
 from ..runtime.cache import get_cache_manager, get_dump_manager, get_override_manager
 from ..runtime.driver import driver
