@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Benchmark compile commands from recursively discovered comptime.json files."""
+import os
 
 import argparse
 import json
@@ -9,6 +10,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+def get_cpu_usage():
+    _, load5, _ = os.getloadavg()
+    cpu_count = os.cpu_count()
+    assert cpu_count is not None
+    cpu_usage = (load5 / cpu_count) * 100
+    return cpu_usage
 
 def remove_outliers(samples: list[float]) -> list[float]:
     """Discard timings whose MAD-based modified Z-score exceeds 3.5."""
@@ -66,6 +73,7 @@ def load_benchmark_records(input_dir: Path, runs: int) -> list[dict[str, Any]]:
             "kernel_signature": signature,
             "command": command,
             "command_average_time": average_time,
+            "cpu_usage": get_cpu_usage()
         })
     return records
 
@@ -82,6 +90,7 @@ def write_xlsx(records: list[dict[str, Any]], output_path: Path) -> None:
             "kernel_signature",
             "command",
             "command_average_time",
+            "cpu_usage"
         ]).to_excel(output_path, index=False)
     except ImportError as error:
         raise RuntimeError("writing XLSX requires an Excel engine such as openpyxl") from error
