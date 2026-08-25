@@ -270,7 +270,7 @@ def compile(src, target=None, options=None, _env_vars=None):
     if isinstance(src, ASTSource) and isinstance(src.fn, JITFunction):
         comptime_launch_metadata = {
             "constexpr_signature":
-                src.fn.__name__ + "(" + ", ".join([f"{src.fn.params[k[0]].name}={v}" for k, v in src.constants.items()]) + ")"
+                src.fn.__name__ + "(" + ", ".join([f"{k}={v}" for k, v in src.constants.items()]) + ")"
         }
         metadata["comptime"] = comptime_launch_metadata
 
