@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Benchmark compile commands from recursively discovered comptime.json files."""
 import os
 

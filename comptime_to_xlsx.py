@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Convert recursively discovered comptime.json files into an XLSX table."""
 
 import argparse
