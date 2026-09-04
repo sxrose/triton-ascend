@@ -341,6 +341,7 @@ def linalg_to_bc_by_triton_mlir_opt(linalg: str, metadata, opt):
     Returns:
         Bytecode data as bytes (not file path, to avoid temp directory cleanup issues)
     """
+    linalg, metadata = _parse_linalg_metadata(linalg, metadata)
     with tempfile.TemporaryDirectory() as tmpdir:
         ttadapter_path = os.path.join(tmpdir, "kernel.ttadapter.mlir")
         bc_path = os.path.join(tmpdir, "kernel.mlirbc")
@@ -580,12 +581,21 @@ def try_compile_with_config(linalg: str, ub_config: Dict[str, Any], metadata: di
         return (False, str(e))
 
 
-def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
-    linalg, metadata = _parse_linalg_metadata(linalg, metadata)
+def linalg_to_bin_enable_npu_compile_910_95(src: str | bytes, metadata, opt):
+    if isinstance(src, str):
+        src, metadata = _parse_linalg_metadata(src, metadata)
     with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_file_name = "kernel.mlir" if opt.use_bytecode else "kernel.ttadapter.mlir"
+        if opt.use_bytecode:
+            tmp_file_name = "kernel.mlirbc" if opt.compile_bytecode else "kernel.mlir"
+        else:
+            tmp_file_name = "kernel.ttadapter.mlir"
         ttadapter_path = os.path.join(tmpdir, tmp_file_name)
-        Path(ttadapter_path).write_text(linalg)
+        if opt.compile_bytecode:
+            assert isinstance(src, bytes)
+            Path(ttadapter_path).write_bytes(src)
+        else:
+            assert isinstance(src, str)
+            Path(ttadapter_path).write_text(src)
         bin_file = os.path.join(tmpdir, "kernel")
         if _check_bishengir_api_change():
             bin_file_with_ext = "kernel.o"
@@ -844,12 +854,21 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
         return Path(bin_path).read_bytes()
 
 
-def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
-    linalg, metadata = _parse_linalg_metadata(linalg, metadata)
+def linalg_to_bin_enable_npu_compile_A2_A3(src: str | bytes, metadata, opt):
+    if isinstance(src, str):
+        src, metadata = _parse_linalg_metadata(src, metadata)
     with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_file_name = "kernel.mlir" if opt.use_bytecode else "kernel.ttadapter.mlir"
+        if opt.use_bytecode:
+            tmp_file_name = "kernel.mlirbc" if opt.compile_bytecode else "kernel.mlir"
+        else:
+            tmp_file_name = "kernel.ttadapter.mlir"
         ttadapter_path = os.path.join(tmpdir, tmp_file_name)
-        Path(ttadapter_path).write_text(linalg)
+        if opt.compile_bytecode:
+            assert isinstance(src, bytes)
+            Path(ttadapter_path).write_bytes(src)
+        else:
+            assert isinstance(src, str)
+            Path(ttadapter_path).write_text(src)
         bin_file = os.path.join(tmpdir, "kernel")
         if _check_bishengir_api_change():
             bin_file_with_ext = "kernel.o"
@@ -1190,6 +1209,9 @@ class NPUOptions:
     # If False, the compilation flow is:
     #   Linalg IR → LLIR → Binary (via bishengir-compile directly)
     use_bytecode: bool = True
+    # If True with use_bytecode, compile the MLIR bytecode directly and skip
+    # the bytecode-to-text conversion stage.
+    compile_bytecode: bool = False
     # take effect on the reorder instruction pattern for SIMT. The pattern is disabled by default.
     enable_simt_reorder_instruction: bool = False
     enable_costmodel_backend: bool = False
@@ -1236,6 +1258,11 @@ class NPUOptions:
                 object.__setattr__(self, "shared_mem_dynamic_size", 122880)
         else:
             object.__setattr__(self, "shared_mem_dynamic_size", 221184)
+
+        if not self.use_bytecode:
+            object.__setattr__(self, "compile_bytecode", False)
+        elif os.getenv("TRITON_COMPILE_BYTECODE", "false").lower() in ("true", "1"):
+            object.__setattr__(self, "compile_bytecode", True)
 
     def hash(self):
         key = "_".join([f"{name}-{val}" for name, val in self.__dict__.items()])
@@ -1455,12 +1482,14 @@ class AscendBackend(BaseBackend):
                 stages["npubin"] = (lambda src, metadata: ttir_to_npubin(src, metadata, options))
                 return
             stages["ttadapter"] = lambda src, metadata: ttir_to_linalg(src, metadata, options, named_ops=True)
-            # Support BC mode: convert Linalg IR to Bytecode format, then back to MLIR
+            # Support BC mode: convert Linalg IR to Bytecode format, then back
+            # to MLIR unless the compiling bytecode directly is enabled.
             if options.use_bytecode:
                 # Step 1: Convert Linalg IR to Bytecode using triton-mlir-opt
                 stages["mlirbc"] = lambda src, metadata: linalg_to_bc_by_triton_mlir_opt(src, metadata, options)
                 # Step 2: Convert Bytecode back to MLIR text using bishengir-opt
-                stages["bcmlir"] = lambda src, metadata: bc_to_linalg_by_bishengir_opt(src, metadata, options)
+                if not options.compile_bytecode:
+                    stages["bcmlir"] = lambda src, metadata: bc_to_linalg_by_bishengir_opt(src, metadata, options)
             if options.compile_on_910_95:
                 stages["npubin"] = (
                     lambda src, metadata: linalg_to_bin_enable_npu_compile_910_95(src, metadata, options))
